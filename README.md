@@ -1,10 +1,11 @@
 # funcsplit.py
 
-So you wrote a Python function/method that's too long, and now you want
-to split it.  Where - well, where the number of active variables is at a
-minimum.  `funcsplit.py` uses [AST tree](https://docs.python.org/3/library/ast.html)
-parsing to count the number of active variables (variables which will
-be used again further down the function) on each line of the function.
+So you wrote a Python function/method that's too long, and now you want to
+split it.  But where? Well, where the number of active variables is at a
+minimum.  `funcsplit.py` uses
+[AST tree](https://docs.python.org/3/library/ast.html) parsing to count the
+number of active variables (variables which will be used again further down the
+function) on each line of the function.
 
 For example, for code with a too complex function in lines 37-105:
 ```
