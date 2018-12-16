@@ -13,6 +13,7 @@ class NameCounter(ast.NodeVisitor):
         ast.NodeVisitor.__init__(self, *args, **kwargs)
         self.report_depth = 2
         self.imported = set(['self'])
+        self._fmt_method = self.fmt_list_color
 
     def node_key(self, node):
         """a = 7 -> a:Store, print(b) -> b:Load, so we can detect variable
@@ -29,6 +30,40 @@ class NameCounter(ast.NodeVisitor):
                 culls.add(name + ':Load')
         return items - culls
 
+    def fmt_list(self, line, common, diff, inst=False):
+        return self._fmt_method(line, common, diff, inst=inst)
+
+    @staticmethod
+    def fmt_list_bw(line, common, diff, inst=False):
+        fmt = lambda x: x.rsplit('.', 1)[0]
+        if inst:
+            fmt = lambda x: x
+        return "%3d %2d %2d %s" % (
+            line,
+            len(common) + len(diff),
+            len(common),
+            ' '.join(
+                sorted(map(fmt, common) + [i + '*' for i in map(fmt, diff)])
+            ),
+        )
+
+    @staticmethod
+    def fmt_list_color(line, common, diff, inst=False):
+        fmt = lambda x: x.rsplit('.', 1)[0]
+        if inst:
+            fmt = lambda x: x
+        colored = []
+        for name in sorted(i for i in common | diff):
+            colored.append(
+                "\033[32m%s\033[0m" % fmt(name) if name in diff else fmt(name)
+            )
+        return "%3d %2d %2d %s" % (
+            line,
+            len(common) + len(diff),
+            len(common),
+            ' '.join(colored),
+        )
+
     def visit(self, node, depth=0):
         """reuse of names is a problem, reset on assignment?
 
@@ -42,6 +77,9 @@ class NameCounter(ast.NodeVisitor):
             return set()
 
         node_names = set()
+
+        if depth <= self.report_depth and isinstance(node, ast.Name):
+            self.imported.add(node.id)
 
         if (
             isinstance(node, ast.Name)
@@ -88,19 +126,11 @@ class NameCounter(ast.NodeVisitor):
                 if first <= line <= last:
                     breadth[line].add(name)
 
-        fmt = lambda x: x.rsplit('.', 1)[0]
-        # fmt = lambda x: x
         prev = set()
         for line in sorted(breadth):
-            print(
-                "%3d %2d %2d %s"
-                % (
-                    line,
-                    len(breadth[line]),
-                    len(prev & breadth[line]),
-                    ' '.join(sorted(map(fmt, breadth[line]))),
-                )
-            )
+            common = prev & breadth[line]
+            diff = breadth[line] - common
+            print(self.fmt_list(line, common, diff, inst=False))
             prev = breadth[line]
 
         return self.store_load(node_names)
