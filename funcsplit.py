@@ -3,11 +3,7 @@ import sys
 
 from collections import defaultdict
 
-test = "if a == True or otter12 is -13.6 * w"
-
 lines = [i.rstrip() for i in sys.stdin]
-
-# lines = [test]
 
 
 class NameCounter(ast.NodeVisitor):
@@ -16,7 +12,7 @@ class NameCounter(ast.NodeVisitor):
     def __init__(self, *args, **kwargs):
         ast.NodeVisitor.__init__(self, *args, **kwargs)
         self.report_depth = 2
-        self.imported = set()
+        self.imported = set(['self'])
 
     def node_key(self, node):
         """a = 7 -> a:Store, print(b) -> b:Load, so we can detect variable
@@ -25,21 +21,19 @@ class NameCounter(ast.NodeVisitor):
         return "%s:%s" % (node.id, node.ctx.__class__.__name__)
 
     def store_load(self, items):
+        """if foo:Load and foo:Store both present, just report foo:Store"""
         culls = set()
         for item in items:
             name = item.split(':', 1)[0]
-            if name+':Store' in items and name+':Load' in items:
-                culls.add(name+':Load')
-        if culls:
-            print(culls)
-        return items-culls
+            if name + ':Store' in items and name + ':Load' in items:
+                culls.add(name + ':Load')
+        return items - culls
 
     def visit(self, node, depth=0):
         """reuse of names is a problem, reset on assignment?
 
         i.e. when expr_context is Store?
         """
-
         if isinstance(node, ast.Import):
             self.imported.update(i.asname or i.name for i in node.names)
             return set()
@@ -65,6 +59,10 @@ class NameCounter(ast.NodeVisitor):
 
         if depth != self.report_depth:
             return self.store_load(node_names)
+
+        return self.proc_names(line_names, node_names)
+
+    def proc_names(self, line_names, node_names):
 
         minmax = {}
         name_inc = defaultdict(lambda: 0)
