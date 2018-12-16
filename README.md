@@ -7,9 +7,19 @@ minimum.  `funcsplit.py` uses
 number of active variables (variables which will be used again further down the
 function) on each line of the function.
 
+Use
+```
+python funcsplit.py class < badcode.py
+```
+to scan `def`s withing classes, and just
+```
+python funcsplit.py < badcode.py
+```
+to scan module (top) level `def`s.
+
 For example, for code with a too complex function in lines 37-105:
 ```
-python funcsplit.py <badcode.py
+python funcsplit.py class < badcode.py
 
 ...
  43  2 i node

@@ -106,5 +106,7 @@ class NameCounter(ast.NodeVisitor):
 top = ast.parse('\n'.join(lines))
 
 nc = NameCounter()
+if 'class' not in sys.argv[1:]:
+    nc.report_depth = 1
 
 nc.visit(top)
