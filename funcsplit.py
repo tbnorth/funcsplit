@@ -90,15 +90,18 @@ class NameCounter(ast.NodeVisitor):
 
         fmt = lambda x: x.rsplit('.', 1)[0]
         # fmt = lambda x: x
+        prev = set()
         for line in sorted(breadth):
             print(
-                "%3d %2d %s"
+                "%3d %2d %2d %s"
                 % (
                     line,
                     len(breadth[line]),
+                    len(prev & breadth[line]),
                     ' '.join(sorted(map(fmt, breadth[line]))),
                 )
             )
+            prev = breadth[line]
 
         return self.store_load(node_names)
 
