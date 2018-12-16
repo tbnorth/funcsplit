@@ -1,19 +1,19 @@
+import argparse
 import ast
 import sys
 
 from collections import defaultdict
 
-lines = [i.rstrip() for i in sys.stdin]
-
 
 class NameCounter(ast.NodeVisitor):
     """Count names"""
 
-    def __init__(self, *args, **kwargs):
-        ast.NodeVisitor.__init__(self, *args, **kwargs)
-        self.report_depth = 2
+    def __init__(self, depth=1, color=False, reuse=False):
+        ast.NodeVisitor.__init__(self)
+        self.report_depth = depth
         self.imported = set(['self'])
-        self._fmt_method = self.fmt_list_color
+        self._fmt_method = self.fmt_list_color if color else self.fmt_list_bw
+        self.reuse = reuse
 
     def node_key(self, node):
         """a = 7 -> a:Store, print(b) -> b:Load, so we can detect variable
@@ -30,13 +30,12 @@ class NameCounter(ast.NodeVisitor):
                 culls.add(name + ':Load')
         return items - culls
 
-    def fmt_list(self, line, common, diff, inst=False):
-        return self._fmt_method(line, common, diff, inst=inst)
+    def fmt_list(self, line, common, diff):
+        return self._fmt_method(line, common, diff)
 
-    @staticmethod
-    def fmt_list_bw(line, common, diff, inst=False):
+    def fmt_list_bw(self, line, common, diff):
         fmt = lambda x: x.rsplit('.', 1)[0]
-        if inst:
+        if self.reuse:
             fmt = lambda x: x
         return "%3d %2d %2d %s" % (
             line,
@@ -47,10 +46,9 @@ class NameCounter(ast.NodeVisitor):
             ),
         )
 
-    @staticmethod
-    def fmt_list_color(line, common, diff, inst=False):
+    def fmt_list_color(self, line, common, diff):
         fmt = lambda x: x.rsplit('.', 1)[0]
-        if inst:
+        if self.reuse:
             fmt = lambda x: x
         colored = []
         for name in sorted(i for i in common | diff):
@@ -130,16 +128,67 @@ class NameCounter(ast.NodeVisitor):
         for line in sorted(breadth):
             common = prev & breadth[line]
             diff = breadth[line] - common
-            print(self.fmt_list(line, common, diff, inst=False))
+            print(self.fmt_list(line, common, diff))
             prev = breadth[line]
 
         return self.store_load(node_names)
 
 
-top = ast.parse('\n'.join(lines))
+def make_parser():
 
-nc = NameCounter()
-if 'class' not in sys.argv[1:]:
-    nc.report_depth = 1
+    parser = argparse.ArgumentParser(
+        description="""Find places to split long functions / methods""",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
-nc.visit(top)
+    parser.add_argument(
+        "--color", action='store_true', help="Use color output", default=False,
+    )
+    parser.add_argument(
+        "--reuse",
+        action='store_true',
+        help="Show variable name reuse (i.0, i.1, etc.)",
+        default=False,
+    )
+    parser.add_argument(
+        'depth',
+        type=int,
+        default=1,
+        nargs='?',
+        help="Reporting depth, 1 for module level functions, "
+        "2 for defs within classes",
+    )
+
+    return parser
+
+
+def get_options(args=None):
+    """
+    get_options - use argparse to parse args, and return a
+    argparse.Namespace, possibly with some changes / expansions /
+    validatations.
+
+    Client code should call this method with args as per sys.argv[1:],
+    rather than calling make_parser() directly.
+
+    :param [str] args: arguments to parse
+    :return: options with modifications / validations
+    :rtype: argparse.Namespace
+    """
+    opt = make_parser().parse_args(args)
+
+    # modifications / validations go here
+
+    return opt
+
+def main():
+    opt = get_options()
+    lines = [i.rstrip() for i in sys.stdin]
+    top = ast.parse('\n'.join(lines))
+
+    nc = NameCounter(depth=opt.depth, color=opt.color, reuse=opt.reuse)
+
+    nc.visit(top)
+
+if __name__ == "__main__":
+    main()
