@@ -50,3 +50,8 @@ reported line, use `--color` for green highlight instead.
 You can see there's a sweet spot for splitting the
 function between line 66 (last time `depth` was referenced) and 69 (when
 `min_max` is first defined).
+
+*NOTE:* on lines 43 and 46 `i` is listed as new both times, because the variable
+name `i` has been reused.  Use `--reuse` to see this displayed as `i.0`, `i.1`, etc.
+
+
