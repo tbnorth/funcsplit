@@ -24,6 +24,16 @@ class NameCounter(ast.NodeVisitor):
         """
         return "%s:%s" % (node.id, node.ctx.__class__.__name__)
 
+    def store_load(self, items):
+        culls = set()
+        for item in items:
+            name = item.split(':', 1)[0]
+            if name+':Store' in items and name+':Load' in items:
+                culls.add(name+':Load')
+        if culls:
+            print(culls)
+        return items-culls
+
     def visit(self, node, depth=0):
         """reuse of names is a problem, reset on assignment?
 
@@ -54,7 +64,7 @@ class NameCounter(ast.NodeVisitor):
                 line_names[child.lineno].update(child_names)
 
         if depth != self.report_depth:
-            return node_names
+            return self.store_load(node_names)
 
         minmax = {}
         name_inc = defaultdict(lambda: 0)
@@ -73,7 +83,6 @@ class NameCounter(ast.NodeVisitor):
                         min(minmax[name][0], line),
                         max(minmax[name][1], line),
                     )
-        # print('\n'.join(str(i) for i in minmax.items()))
 
         breadth = defaultdict(set)
         for line in line_names:
@@ -82,7 +91,7 @@ class NameCounter(ast.NodeVisitor):
                     breadth[line].add(name)
 
         fmt = lambda x: x.rsplit('.', 1)[0]
-        fmt = lambda x: x
+        # fmt = lambda x: x
         for line in sorted(breadth):
             print(
                 "%3d %2d %s"
@@ -93,7 +102,7 @@ class NameCounter(ast.NodeVisitor):
                 )
             )
 
-        return node_names
+        return self.store_load(node_names)
 
 
 top = ast.parse('\n'.join(lines))
@@ -101,4 +110,3 @@ top = ast.parse('\n'.join(lines))
 nc = NameCounter()
 
 nc.visit(top)
-# print(ast.dump(top))
