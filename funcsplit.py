@@ -107,6 +107,7 @@ class NameCounter(ast.NodeVisitor):
         return self.store_load(node_names)
 
     def proc_names(self, line_names, node_names):
+        """Analyze names and produce output"""
 
         minmax = {}
         name_inc = defaultdict(lambda: 0)
@@ -168,7 +169,7 @@ class NameCounter(ast.NodeVisitor):
 
 
 def make_parser():
-
+    """prepare an argparse argument parser"""
     parser = argparse.ArgumentParser(
         description="""Find places to split long functions / methods""",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -200,8 +201,7 @@ def make_parser():
 
 
 def get_options(args=None):
-    """
-    get_options - use argparse to parse args, and return a
+    """get_options - use argparse to parse args, and return a
     argparse.Namespace, possibly with some changes / expansions /
     validatations.
 
