@@ -2,7 +2,9 @@ import argparse
 import ast
 import sys
 
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+
+Output = namedtuple("Output", "line common diff")
 
 
 class NameCounter(ast.NodeVisitor):
@@ -14,6 +16,7 @@ class NameCounter(ast.NodeVisitor):
         self.imported = set(['self'])
         self._fmt_method = self.fmt_list_color if color else self.fmt_list_bw
         self.reuse = reuse
+        self.all_lines = []
 
     def node_key(self, node):
         """a = 7 -> a:Store, print(b) -> b:Load, so we can detect variable
@@ -33,27 +36,29 @@ class NameCounter(ast.NodeVisitor):
     def fmt_list(self, line, common, diff):
         return self._fmt_method(line, common, diff)
 
+    def fmt_reuse(self, text):
+        return text if self.reuse else text.rsplit('.', 1)[0]
+
     def fmt_list_bw(self, line, common, diff):
-        fmt = lambda x: x.rsplit('.', 1)[0]
-        if self.reuse:
-            fmt = lambda x: x
         return "%3d %2d %2d %s" % (
             line,
             len(common) + len(diff),
             len(common),
             ' '.join(
-                sorted(map(fmt, common) + [i + '*' for i in map(fmt, diff)])
+                sorted(
+                    map(self.fmt_reuse, common)
+                    + [i + '*' for i in map(self.fmt_reuse, diff)]
+                )
             ),
         )
 
     def fmt_list_color(self, line, common, diff):
-        fmt = lambda x: x.rsplit('.', 1)[0]
-        if self.reuse:
-            fmt = lambda x: x
         colored = []
         for name in sorted(i for i in common | diff):
             colored.append(
-                "\033[32m%s\033[0m" % fmt(name) if name in diff else fmt(name)
+                "\033[32m%s\033[0m" % self.fmt_reuse(name)
+                if name in diff
+                else self.fmt_reuse(name)
             )
         return "%3d %2d %2d %s" % (
             line,
@@ -63,10 +68,7 @@ class NameCounter(ast.NodeVisitor):
         )
 
     def visit(self, node, depth=0):
-        """reuse of names is a problem, reset on assignment?
-
-        i.e. when expr_context is Store?
-        """
+        """Visit each node in AST tree"""
         if isinstance(node, ast.Import):
             self.imported.update(i.asname or i.name for i in node.names)
             return set()
@@ -93,10 +95,10 @@ class NameCounter(ast.NodeVisitor):
             if hasattr(child, 'lineno'):
                 line_names[child.lineno].update(child_names)
 
-        if depth != self.report_depth:
-            return self.store_load(node_names)
+        if depth == self.report_depth:
+            self.proc_names(line_names, node_names)
 
-        return self.proc_names(line_names, node_names)
+        return self.store_load(node_names)
 
     def proc_names(self, line_names, node_names):
 
@@ -129,9 +131,21 @@ class NameCounter(ast.NodeVisitor):
             common = prev & breadth[line]
             diff = breadth[line] - common
             print(self.fmt_list(line, common, diff))
+            self.all_lines.append(Output(line, common, diff))
             prev = breadth[line]
 
-        return self.store_load(node_names)
+    def vim_script(self):
+        scr = []
+        tmpl = 'exe ":sign place %d line=%d name=s%d file=" . expand("%%:p")'
+        # set of variable counts
+        signs = set(len(i.common) for i in self.all_lines)
+        scr.append("sign unplace *")
+        for sign in signs:
+            # define sign `s12` with text "12"
+            scr.append("sign define s%s text=%s" % (sign, sign))
+        for n, output in enumerate(self.all_lines):
+            scr.append(tmpl % (n + 1, output.line, len(output.common)))
+        return '\n'.join(scr)
 
 
 def make_parser():
@@ -142,13 +156,17 @@ def make_parser():
     )
 
     parser.add_argument(
-        "--color", action='store_true', help="Use color output", default=False,
+        "--color", action='store_true', help="Use color output", default=False
     )
     parser.add_argument(
         "--reuse",
         action='store_true',
         help="Show variable name reuse (i.0, i.1, etc.)",
         default=False,
+    )
+    parser.add_argument(
+        "--vim-script",
+        help="Write a script to FILE to display variable counts in Vim",
     )
     parser.add_argument(
         'depth',
@@ -181,6 +199,7 @@ def get_options(args=None):
 
     return opt
 
+
 def main():
     opt = get_options()
     lines = [i.rstrip() for i in sys.stdin]
@@ -189,6 +208,11 @@ def main():
     nc = NameCounter(depth=opt.depth, color=opt.color, reuse=opt.reuse)
 
     nc.visit(top)
+
+    if opt.vim_script:
+        with open(opt.vim_script, 'w') as out:
+            out.write(nc.vim_script())
+
 
 if __name__ == "__main__":
     main()
