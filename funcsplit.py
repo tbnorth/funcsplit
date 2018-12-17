@@ -14,7 +14,7 @@ class NameCounter(ast.NodeVisitor):
         ast.NodeVisitor.__init__(self)
         self.report_depth = depth
         self.imported = set(['self'])
-        self._fmt_method = self.fmt_list_color if color else self.fmt_list_bw
+        self.color = color
         self.reuse = reuse
         self.all_lines = []
 
@@ -33,37 +33,43 @@ class NameCounter(ast.NodeVisitor):
                 culls.add(name + ':Load')
         return items - culls
 
-    def fmt_list(self, line, common, diff):
-        return self._fmt_method(line, common, diff)
+    def fmt_list(self, output, color=None):
+        if color is None:
+            # allow vim_script to override user setting
+            color = self.color
+        if color:
+            return self.fmt_list_color(output)
+        else:
+            return self.fmt_list_bw(output)
 
     def fmt_reuse(self, text):
         return text if self.reuse else text.rsplit('.', 1)[0]
 
-    def fmt_list_bw(self, line, common, diff):
+    def fmt_list_bw(self, outline):
         return "%3d %2d %2d %s" % (
-            line,
-            len(common) + len(diff),
-            len(common),
+            outline.line,
+            len(outline.common) + len(outline.diff),
+            len(outline.common),
             ' '.join(
                 sorted(
-                    map(self.fmt_reuse, common)
-                    + [i + '*' for i in map(self.fmt_reuse, diff)]
+                    map(self.fmt_reuse, outline.common)
+                    + [i + '*' for i in map(self.fmt_reuse, outline.diff)]
                 )
             ),
         )
 
-    def fmt_list_color(self, line, common, diff):
+    def fmt_list_color(self, outline):
         colored = []
-        for name in sorted(i for i in common | diff):
+        for name in sorted(i for i in outline.common | outline.diff):
             colored.append(
                 "\033[32m%s\033[0m" % self.fmt_reuse(name)
-                if name in diff
+                if name in outline.diff
                 else self.fmt_reuse(name)
             )
         return "%3d %2d %2d %s" % (
-            line,
-            len(common) + len(diff),
-            len(common),
+            outline.line,
+            len(outline.common) + len(outline.diff),
+            len(outline.common),
             ' '.join(colored),
         )
 
@@ -95,7 +101,7 @@ class NameCounter(ast.NodeVisitor):
             if hasattr(child, 'lineno'):
                 line_names[child.lineno].update(child_names)
 
-        if depth == self.report_depth:
+        if depth <= self.report_depth:
             self.proc_names(line_names, node_names)
 
         return self.store_load(node_names)
@@ -130,21 +136,34 @@ class NameCounter(ast.NodeVisitor):
         for line in sorted(breadth):
             common = prev & breadth[line]
             diff = breadth[line] - common
-            print(self.fmt_list(line, common, diff))
-            self.all_lines.append(Output(line, common, diff))
+            output = Output(line, common, diff)
+            print(self.fmt_list(output))
+            self.all_lines.append(output)
             prev = breadth[line]
 
     def vim_script(self):
         scr = []
-        tmpl = 'exe ":sign place %d line=%d name=s%d file=" . expand("%%:p")'
+        tmpl = 'exe "sign place %d line=%d name=s%d file=" . expand("%%:p")'
+        tmp2 = 'exe "cadde \\"" . expand("%%") . ":%d:%s\\""'
+
         # set of variable counts
         signs = set(len(i.common) for i in self.all_lines)
         scr.append("sign unplace *")
+        scr.append("cexpr []")
+        scr.append('set errorformat=%f:%l:%m')
         for sign in signs:
             # define sign `s12` with text "12"
-            scr.append("sign define s%s text=%s" % (sign, sign))
+            scr.append(
+                "sign define s%s text=%s"
+                % (sign, sign if sign < 100 else 'XX')
+            )
         for n, output in enumerate(self.all_lines):
             scr.append(tmpl % (n + 1, output.line, len(output.common)))
+            scr.append(
+                tmp2
+                % (output.line, self.fmt_list(output, color=False))
+                # tmp2 % (output.line, 'ERR')
+            )
         return '\n'.join(scr)
 
 
