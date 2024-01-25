@@ -52,7 +52,7 @@ class NameCounter(ast.NodeVisitor):
             len(outline.common),
             ' '.join(
                 sorted(
-                    map(self.fmt_reuse, outline.common)
+                    list(map(self.fmt_reuse, outline.common))
                     + [i + '*' for i in map(self.fmt_reuse, outline.diff)]
                 )
             ),
